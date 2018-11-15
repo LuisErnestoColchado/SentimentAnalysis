@@ -57,6 +57,20 @@ yTest = Y[40000:50000]
 #%%
 xTrain[0:10]
 #%%
+numWords = []
+for x in xTrain:
+    count = len(x)
+    numWords.append(count)
+mean = np.mean(numWords)
+#%%
+import matplotlib.pyplot as plt
+#%matplotlib inline
+plt.hist(numWords, 50)
+plt.xlabel('Sequence Length')
+plt.ylabel('Frequency')
+plt.axis([0, 1200, 0, 8000])
+plt.show()
+#%%
 # Function to average all word vectors in a paragraph
 def featureVecMethod(words, model, num_features):
     # Pre-initialising empty numpy array for speed
@@ -91,20 +105,50 @@ def getAvgFeatureVecs(reviews, model, num_features):
     return reviewFeatureVecs
 
 #%%
-trainDataVecs = getAvgFeatureVecs(xTrain, W2V, 100)
-testDataVecs = getAvgFeatureVecs(xTest, W2V, 100)
+trainDataVecs = getAvgFeatureVecs(xTrain, W2V, mean)
+testDataVecs = getAvgFeatureVecs(xTest, W2V, mean)
 #%%
-def lstm_cell():
+trainDataVecs = trainDataVecs.T
+testDataVecs = testDataVecs.T
+#%%
+df.shape.ndims
+#%%
+lstmSize = 3
+number_of_layers = 3
+batch_size = 24
+num_steps = 49999
+probabilities = []
+loss = 0.0
+learning_rate = np.power(10.0,-4.0)
+
+W = np.random.rand(1,1)
+b = np.random.rand(1,1)
+
+def lstm_cell(lstm_size):
   return tf.contrib.rnn.BasicLSTMCell(lstm_size)
-stacked_lstm = tf.contrib.rnn.MultiRNNCell(
-    [lstm_cell() for _ in range(number_of_layers)])
 
-initial_state = state = stacked_lstm.zero_state(batch_size, tf.float32)
-for i in range(num_steps):
+def lossFunction(y,currentYTrain):
+    return -1*np.mean(np.multiply(currentYTrain,np.log(y)) + np.multiply((1-currentYTrain),np.log(1-y)))
+
+#stacked_lstm = tf.contrib.rnn.MultiRNNCell(
+#    [lstm_cell() for _ in range(number_of_layers)])
+
+lstm = lstm_cell(lstmSize)
+state = lstm.zero_state(batch_size, dtype=tf.float32).eval()
+input = np.zeros((batch_size, 100))
+for i in range(0,num_steps):
     # The value of state is updated after processing each batch of words.
-    output, state = stacked_lstm(words[:, i], state)
-
-    # The rest of the code.
-    # ...
-
+    #output, state = stacked_lstm(trainDataVecs[:, i], state)
+    input[0:24,:] = trainDataVecs[i:i+24,:]
+    print(input[0:24,:].shape);
+    output, state = lstm(input[0:24,:], state)
+    
+    logits = tf.matmul(output, W) + b
+    probabilities.append(tf.nn.softmax(logits))
+    loss = lossFunction(probabilities, yTrain)
+    optimzer = tf.train.AdadeltaOptimizer (learning_rate).minimize(loss)
+    print("step ",i,"loss",loss)
 final_state = state
+
+def session():
+    
