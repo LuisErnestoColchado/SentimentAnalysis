@@ -9,7 +9,7 @@ import gensim
 LabeledSentence = gensim.models.doc2vec.LabeledSentence
 from tqdm import tqdm
 
-#%%
+#%%>
 
 # if you want to download the original file:
 #df = pd.read_csv('https://raw.githubusercontent.com/rasbt/pattern_classification/master/data/50k_imdb_movie_reviews.csv')
@@ -43,17 +43,10 @@ tokenizer_start(X)
 #%%
 X[0]
 #%%
-W2V = Word2Vec(size=100, min_count=10)
-W2V.build_vocab(X)
-W2V.train(X,total_examples=len(X),epochs=10)
-
-#%%
-W2V.most_similar('good')
-#%%
 xTrain = X[0:40000]
 xTest = X[40000:50000]
-yTrain = Y[0:40000]
-yTest = Y[40000:50000]
+yTrain = Y[0:40000].astype(np.float32)
+yTest = Y[40000:50000].astype(np.float32)
 #%%
 xTrain[0:10]
 #%%
@@ -62,6 +55,13 @@ for x in xTrain:
     count = len(x)
     numWords.append(count)
 mean = np.mean(numWords)
+#%%
+W2V = Word2Vec(size=int(mean), min_count=10)
+W2V.build_vocab(X)
+W2V.train(X,total_examples=len(X),epochs=10)
+
+#%%
+W2V.most_similar('good')
 #%%
 import matplotlib.pyplot as plt
 #%matplotlib inline
@@ -105,50 +105,141 @@ def getAvgFeatureVecs(reviews, model, num_features):
     return reviewFeatureVecs
 
 #%%
-trainDataVecs = getAvgFeatureVecs(xTrain, W2V, mean)
-testDataVecs = getAvgFeatureVecs(xTest, W2V, mean)
+trainDataVecs = getAvgFeatureVecs(xTrain, W2V, int(mean))
+testDataVecs = getAvgFeatureVecs(xTest, W2V, int(mean))
 #%%
 trainDataVecs = trainDataVecs.T
 testDataVecs = testDataVecs.T
 #%%
-df.shape.ndims
+#lstmSize = 3
+#number_of_layers = 3
+#batch_size = 24
+#num_steps = 49999
+#probabilities = []
+#loss = 0.0
+#learning_rate = np.power(10.0,-4.0)
+#
+#W = np.random.rand(1,1)
+#b = np.random.rand(1,1)
+#
+#def lstm_cell(lstm_size):
+#  return tf.contrib.rnn.BasicLSTMCell(lstm_size)
+#
+#def lossFunction(y,currentYTrain):
+#    return -1*np.mean(np.multiply(currentYTrain,np.log(y)) + np.multiply((1-currentYTrain),np.log(1-y)))
+#
+##stacked_lstm = tf.contrib.rnn.MultiRNNCell(
+##    [lstm_cell() for _ in range(number_of_layers)])
+#
+#lstm = lstm_cell(lstmSize)
+#state = lstm.zero_state(batch_size, dtype=tf.float32).eval()
+#input = np.zeros((batch_size, 100))
+#for i in range(0,num_steps):
+#    # The value of state is updated after processing each batch of words.
+#    #output, state = stacked_lstm(trainDataVecs[:, i], state)
+#    input[0:24,:] = trainDataVecs[i:i+24,:]
+#    print(input[0:24,:].shape);
+#    output, state = lstm(input[0:24,:], state)
+#    
+#    logits = tf.matmul(output, W) + b
+#    probabilities.append(tf.nn.softmax(logits))
+#    loss = lossFunction(probabilities, yTrain)
+#    optimzer = tf.train.AdadeltaOptimizer (learning_rate).minimize(loss)
+#    print("step ",i,"loss",loss)
+#final_state = state
+#
+#def session():
 #%%
-lstmSize = 3
-number_of_layers = 3
-batch_size = 24
-num_steps = 49999
-probabilities = []
-loss = 0.0
-learning_rate = np.power(10.0,-4.0)
+learning_rate = np.power(10.0,-3.0)
+training_steps = 10000
+batch_size = 100
+display_step = 1000
 
-W = np.random.rand(1,1)
-b = np.random.rand(1,1)
+num_input = 119
+timesteps = 1
+num_hidden = 120 
+num_classes = 1
 
-def lstm_cell(lstm_size):
-  return tf.contrib.rnn.BasicLSTMCell(lstm_size)
+#%%
+# Training Parameters
+tf.reset_default_graph()
 
-def lossFunction(y,currentYTrain):
-    return -1*np.mean(np.multiply(currentYTrain,np.log(y)) + np.multiply((1-currentYTrain),np.log(1-y)))
+X = tf.placeholder("float", [None, timesteps, num_input])
+Y = tf.placeholder("float", [None, num_classes])
 
-#stacked_lstm = tf.contrib.rnn.MultiRNNCell(
-#    [lstm_cell() for _ in range(number_of_layers)])
+weights = {
+    'out': tf.Variable(tf.random_normal([num_hidden, num_classes]))
+}
+biases = {
+    'out': tf.Variable(tf.random_normal([num_classes]))
+}
 
-lstm = lstm_cell(lstmSize)
-state = lstm.zero_state(batch_size, dtype=tf.float32).eval()
-input = np.zeros((batch_size, 100))
-for i in range(0,num_steps):
-    # The value of state is updated after processing each batch of words.
-    #output, state = stacked_lstm(trainDataVecs[:, i], state)
-    input[0:24,:] = trainDataVecs[i:i+24,:]
-    print(input[0:24,:].shape);
-    output, state = lstm(input[0:24,:], state)
-    
-    logits = tf.matmul(output, W) + b
-    probabilities.append(tf.nn.softmax(logits))
-    loss = lossFunction(probabilities, yTrain)
-    optimzer = tf.train.AdadeltaOptimizer (learning_rate).minimize(loss)
-    print("step ",i,"loss",loss)
-final_state = state
 
-def session():
-    
+def RNN(x, weights, biases):
+
+    x = tf.unstack(x, timesteps, 1)
+
+    lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_hidden, forget_bias=1.0)
+
+    outputs, states = tf.contrib.rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
+    #print(weights['out'])
+
+    return tf.matmul(outputs[-1], weights['out']) + biases['out']
+
+logits = RNN(X, weights, biases)
+
+prediction = tf.nn.sigmoid(logits)
+
+loss_op = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
+    logits=logits, labels=Y))
+optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+train_op = optimizer.minimize(loss_op)
+
+p5 = tf.constant(0.5)
+delta = tf.abs((Y - prediction))
+correct_prediction = tf.cast(tf.less(delta, p5), tf.int32)
+accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+init = tf.global_variables_initializer()
+#%%
+
+with tf.Session() as sess:
+
+    sess.run(init)
+    count = 0
+    startData = 0
+    endData = 100
+    for step in range(1, training_steps+1):
+        #print(step)
+        count+=1
+        batch_x = trainDataVecs[startData:endData,:]
+        batch_y = yTrain[startData:endData]
+        #print(count," - ",endData)
+        batch_x = batch_x.reshape((batch_size, timesteps, num_input))
+        batch_y = batch_y.reshape((batch_size,1))
+        batch_y[:,:].astype(float)
+        sess.run(train_op, feed_dict={X: batch_x, Y: batch_y})
+        if step % display_step == 0 or step == 1:
+
+            loss, acc = sess.run([loss_op, accuracy], feed_dict={X: batch_x,
+                                                                 Y: batch_y})
+            print("Step " + str(step) + ", Minibatch Loss= " + \
+                  "{:.4f}".format(loss) + ", Training Accuracy= " + \
+                  "{:.3f}".format(acc))
+
+        if(endData<trainDataVecs.shape[0]):
+            startData=count*batch_size
+            endData = (count+1)*batch_size
+        else:
+            count=0
+            startData = 0
+            endData = 100
+
+    print("Optimization Finished!")
+
+    test_len = 10000
+    test_data = testDataVecs[:,:].reshape((-1, timesteps, num_input))
+    test_label = yTest[:].reshape((10000,1))
+    #batch_y = batch_y.
+    print("Testing Accuracy:", \
+        sess.run(accuracy, feed_dict={X: test_data, Y: test_label}))
