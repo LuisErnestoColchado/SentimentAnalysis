@@ -151,13 +151,13 @@ testDataVecs = testDataVecs.T
 #def session():
 #%%
 learning_rate = np.power(10.0,-3.0)
-training_steps = 10000
-batch_size = 100
+training_steps = 100000
+batch_size = 1000
 display_step = 1000
 
 num_input = 119
 timesteps = 1
-num_hidden = 120 
+num_hidden = 8
 num_classes = 1
 
 #%%
@@ -193,7 +193,11 @@ prediction = tf.nn.sigmoid(logits)
 loss_op = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
     logits=logits, labels=Y))
 optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
-train_op = optimizer.minimize(loss_op)
+gvs = optimizer.compute_gradients(loss_op)
+capped = [(tf.clip_by_value(grad,-1.,1.),var) for grad,var in gvs]
+#train_op = optimizer.minimize(loss_op)
+train_op = optimizer.apply_gradients(capped)
+optimizer.minimize(loss_op)
 
 p5 = tf.constant(0.5)
 delta = tf.abs((Y - prediction))
@@ -204,11 +208,17 @@ init = tf.global_variables_initializer()
 #%%
 
 with tf.Session() as sess:
-
+    accuracyTraining = []
+    lossTraining = []
+    steps = []
     sess.run(init)
     count = 0
     startData = 0
-    endData = 100
+    endData = batch_size
+    
+    test_len = 10000
+    test_data = testDataVecs[:,:].reshape((-1, timesteps, num_input))
+    test_label = yTest[:].reshape((10000,1))
     for step in range(1, training_steps+1):
         #print(step)
         count+=1
@@ -226,20 +236,28 @@ with tf.Session() as sess:
             print("Step " + str(step) + ", Minibatch Loss= " + \
                   "{:.4f}".format(loss) + ", Training Accuracy= " + \
                   "{:.3f}".format(acc))
-
+            
+            lossTraining.append(loss)
+            steps.append(step)
+            #batch_y = batch_y.
+            accu = sess.run(accuracy, feed_dict={X: test_data, Y: test_label})
+            print("Testing Accuracy: ", accu)
+            accuracyTraining.append(accu)
         if(endData<trainDataVecs.shape[0]):
             startData=count*batch_size
             endData = (count+1)*batch_size
         else:
             count=0
             startData = 0
-            endData = 100
-
+            endData = batch_size
+        #learning_rate += np.power(10.0,-10.0) 
     print("Optimization Finished!")
 
-    test_len = 10000
-    test_data = testDataVecs[:,:].reshape((-1, timesteps, num_input))
-    test_label = yTest[:].reshape((10000,1))
-    #batch_y = batch_y.
-    print("Testing Accuracy:", \
-        sess.run(accuracy, feed_dict={X: test_data, Y: test_label}))
+
+#%%
+#x = np.linspace(0, 10, 100)
+plt.xlabel('step')
+plt.ylabel('loss')
+plt.plot(steps, lossTraining)
+plt.legend()
+plt.show()
